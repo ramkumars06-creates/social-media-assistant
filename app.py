@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import mimetypes
+import re
 from datetime import datetime
 
 import streamlit as st
@@ -39,14 +40,17 @@ PROVIDERS = {
     "OpenAI": {
         "env_key": "OPENAI_API_KEY",
         "key_url": "https://platform.openai.com/api-keys",
+        "usage_url": "https://platform.openai.com/usage",
     },
     "Anthropic": {
         "env_key": "ANTHROPIC_API_KEY",
         "key_url": "https://console.anthropic.com/settings/keys",
+        "usage_url": "https://console.anthropic.com/settings/usage",
     },
     "Google Gemini": {
         "env_key": "GOOGLE_API_KEY",
         "key_url": "https://aistudio.google.com/app/apikey",
+        "usage_url": "https://aistudio.google.com/usage",
     },
 }
 
@@ -350,6 +354,59 @@ def analyze_media(*, media_bytes: bytes, mime_type: str, api_key: str) -> str:
     return analysis
 
 
+def show_provider_error(
+    error: Exception,
+    *,
+    providers: list[str],
+    models: list[str],
+    operation: str,
+) -> None:
+    """Explain provider failures without displaying API-key-like strings."""
+    error_name = type(error).__name__
+    error_text = str(error)
+    normalized = f"{error_name} {error_text}".lower()
+    provider_label = ", ".join(dict.fromkeys(providers)) or "AI provider"
+    model_label = ", ".join(dict.fromkeys(models)) or "selected model"
+
+    if any(term in normalized for term in ("ratelimit", "rate limit", "429", "resource_exhausted", "quota")):
+        st.error(f"{provider_label} rate-limited the {operation} request or the account has reached its available quota.")
+        st.markdown(
+            "**Try these steps**\n"
+            "- Check the provider usage page for request limits, remaining quota, and billing status.\n"
+            "- Wait for the limit to reset, then try again.\n"
+            "- To use fewer requests, turn off the second-model quality pass and generate one platform at a time."
+        )
+    elif any(term in normalized for term in ("authentication", "unauthorized", "invalid api key", "401", "403", "permission denied")):
+        st.error(f"{provider_label} did not accept the configured credentials for {operation}.")
+        st.markdown("Check that the key belongs to this provider, is active, and is saved in the app's Secrets using valid TOML syntax.")
+    elif any(term in normalized for term in ("model not found", "model_not_found", "does not exist", "unknown model", "404")):
+        st.error(f"{provider_label} could not access {model_label} for {operation}.")
+        st.markdown("Choose a model enabled for this API account and confirm that its model name is available in the provider console.")
+    elif any(term in normalized for term in ("timeout", "timed out", "connection", "network", "temporarily unavailable")):
+        st.error(f"The connection to {provider_label} failed during {operation}.")
+        st.markdown("Check the provider status and your connection, then try again in a moment.")
+    else:
+        st.error(f"{provider_label} could not complete {operation} with {model_label}.")
+        st.markdown("Check the provider key, model access, usage limits, and provider status, then try again.")
+
+    usage_providers = [name for name in dict.fromkeys(providers) if name in PROVIDERS]
+    if usage_providers:
+        usage_cols = st.columns(len(usage_providers))
+        for col, provider in zip(usage_cols, usage_providers):
+            with col:
+                st.link_button(f"Check {provider} usage ↗", PROVIDERS[provider]["usage_url"], use_container_width=True)
+
+    st.caption(f"Step: {operation} · Model: {model_label} · Error: {error_name}")
+    safe_detail = error_text
+    safe_detail = re.sub(r"(?i)(sk-(?:proj-|ant-)?[A-Za-z0-9_-]{16,})", "[redacted API key]", safe_detail)
+    safe_detail = re.sub(r"(?i)(AIza[0-9A-Za-z_-]{20,})", "[redacted API key]", safe_detail)
+    safe_detail = re.sub(r"(?i)((?:api[_ -]?key|authorization|bearer)\s*[:=]\s*)\S+", r"\1[redacted]", safe_detail)
+    safe_detail = " ".join(safe_detail.split())[:1200]
+    if safe_detail:
+        with st.expander("Provider response details"):
+            st.code(safe_detail)
+
+
 def export_markdown(posts: dict[str, str], topic: str) -> str:
     labels = {spec["key"]: label for label, spec in PLATFORMS.items()}
     sections = [f"# Social Media Assistant\n\n**Topic:** {topic.strip()}\n"]
@@ -541,15 +598,31 @@ if submitted:
         if missing_providers:
             st.error("Add a key for " + ", ".join(missing_providers) + " under AI connections to use the selected model(s) and media analysis.")
         else:
+            error_operation = "media analysis" if uploaded_media else "post generation"
+            error_providers = (
+                ["Google Gemini"]
+                if uploaded_media
+                else [MODEL_OPTIONS[writer_model_name]["provider"]]
+            )
+            error_models = ["Gemini 3.8 Flash"] if uploaded_media else [writer_model_name]
             try:
                 media_context = None
                 if media_bytes:
+                    error_operation = "photo/video analysis"
                     with st.spinner("Gemini is reading your photo or video…"):
                         media_context = analyze_media(
                             media_bytes=media_bytes,
                             mime_type=media_mime_type,
                             api_key=api_keys[PROVIDERS["Google Gemini"]["env_key"]],
                         )
+                error_operation = "post drafting and review"
+                error_providers = [MODEL_OPTIONS[writer_model_name]["provider"]]
+                error_models = [writer_model_name]
+                if reviewer_model_name:
+                    reviewer_provider = MODEL_OPTIONS[reviewer_model_name]["provider"]
+                    if reviewer_provider not in error_providers:
+                        error_providers.append(reviewer_provider)
+                    error_models.append(reviewer_model_name)
                 with st.spinner("Your platform writers are drafting…" if not review_enabled else "Writers are drafting; your editor is reviewing…"):
                     generated = create_posts(
                         topic=topic,
@@ -573,8 +646,12 @@ if submitted:
                 for key, post in generated.items():
                     st.session_state[f"draft_{key}"] = post
             except Exception as exc:
-                st.error("The content crew could not finish this run.")
-                st.caption(f"{type(exc).__name__}: check the selected provider key, model access, quota, and connection.")
+                show_provider_error(
+                    exc,
+                    providers=error_providers,
+                    models=error_models,
+                    operation=error_operation,
+                )
 
 posts = st.session_state.get("generated_posts", {})
 if posts:

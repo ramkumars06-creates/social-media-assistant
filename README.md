@@ -51,6 +51,10 @@ The app reads root-level Streamlit secrets as server-side environment variables.
 
 Model availability, account access, and billing are managed by each provider. The original GPT-4o-mini choice remains the default. The optional review pass runs after the writing tasks and can use a different provider/model to refine the drafts while preserving facts and brand voice.
 
+## Troubleshooting provider limits
+
+If a generation is rate-limited, check the selected provider's usage and billing page from the app's error panel. A provider may limit requests per minute, or the account may have run out of quota or credits. Wait for a temporary limit to reset, disable the optional second-model review, or generate one platform at a time to reduce the number of calls. Confirm that the selected model is available to the API account. Provider response details are shown in the app with common API-key formats redacted.
+
 ## Project files
 
 - `app.py` — Streamlit interface, provider settings, and CrewAI workflow
