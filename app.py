@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 
 import streamlit as st
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,7 +13,7 @@ st.set_page_config(
     page_title="Social Media Assistant",
     page_icon="✳",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 PLATFORMS = {
@@ -103,35 +104,77 @@ MODEL_OPTIONS = {
 
 DEFAULT_MODEL = "OpenAI · GPT-4o mini"
 
+PLATFORM_LOGOS = {
+    "X / Twitter": '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.64 7.584H.47l8.6-9.83L0 1.153h7.594l5.243 6.932zm-1.29 19.493h2.04L6.486 3.24H4.298z"/></svg>',
+    "LinkedIn": '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.35V9h3.414v1.561h.049c.476-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM3.56 9h3.554v11.452H3.56z"/></svg>',
+    "Instagram": '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.7" cy="6.5" r="1.15" fill="currentColor"/></svg>',
+}
+PLATFORM_COLORS = {"X / Twitter": "#f2f3f6", "LinkedIn": "#56a9ff", "Instagram": "#ff76b8"}
+
 st.markdown(
     """
     <style>
-      :root { --ink: #1e2030; --muted: #74788b; --line: #e7e8f0; --accent: #6957df; }
-      .stApp { background: #f5f5fa; color: var(--ink); }
-      [data-testid="stHeader"] { background: transparent; }
-      [data-testid="stSidebar"] { background: #fff; border-right: 1px solid var(--line); }
-      [data-testid="stSidebar"] > div:first-child { padding-top: 1rem; }
-      .block-container { max-width: 1240px; padding-top: 1.5rem; padding-bottom: 4.5rem; }
-      .hero-panel { color: white; background: linear-gradient(118deg, #21173e 0%, #443377 56%, #765ed0 100%); border-radius: 26px; padding: 2rem 2.25rem 2.15rem; margin-bottom: 1.55rem; box-shadow: 0 18px 55px rgba(57, 43, 105, .18); position: relative; overflow: hidden; }
-      .hero-panel:after { content: ''; position: absolute; width: 280px; height: 280px; border-radius: 50%; right: -75px; top: -145px; background: rgba(255,255,255,.09); box-shadow: -125px 210px 0 -75px rgba(255,255,255,.08); }
-      .hero-top { display: flex; align-items: center; gap: 10px; color: rgba(255,255,255,.72); font-size: .72rem; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; position: relative; z-index: 1; }
-      .brand-mark { width: 27px; height: 27px; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,255,255,.15); border-radius: 9px; color: white; font-size: 1rem; }
-      .hero-title { color: white; font-size: clamp(2.2rem, 4.5vw, 3.65rem); font-weight: 780; letter-spacing: -.055em; line-height: 1.03; margin: 1.1rem 0 .7rem; position: relative; z-index: 1; }
-      .hero-copy { color: rgba(255,255,255,.77); font-size: 1rem; max-width: 670px; line-height: 1.65; margin: 0; position: relative; z-index: 1; }
-      .hero-pills { display: flex; gap: 8px; margin-top: 1.25rem; position: relative; z-index: 1; }
-      .hero-pill { border: 1px solid rgba(255,255,255,.2); border-radius: 999px; color: rgba(255,255,255,.88); padding: 5px 11px; font-size: .76rem; background: rgba(255,255,255,.08); }
-      .section-title { color: #242437; font-size: 1.08rem; font-weight: 730; letter-spacing: -.02em; }
-      .stButton > button[kind="primary"] { background: var(--accent); border: 0; border-radius: 11px; min-height: 3.15rem; font-weight: 720; box-shadow: 0 8px 20px rgba(105,87,223,.2); }
-      .stButton > button[kind="primary"]:hover { background: #5948c9; border: 0; }
-      div[data-testid="stForm"] { background: #fff; border: 1px solid var(--line); padding: 1.45rem 1.5rem 1.35rem; border-radius: 20px; box-shadow: 0 7px 25px rgba(28, 30, 50, .035); }
-      div[data-testid="stTextArea"] textarea, div[data-testid="stTextInput"] input { border-radius: 11px; background: #fcfcfe; }
-      div[data-testid="stSelectbox"] > div > div { border-radius: 10px; }
-      div[data-testid="stCheckbox"] label p { font-weight: 620; }
-      div[data-testid="stExpander"] { border: 1px solid var(--line); border-radius: 15px; background: #fff; }
-      .stCaption { color: #828598; }
-      [data-testid="stMetric"] { background: white; border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; }
-      .result-label { display: inline-flex; gap: 7px; align-items: center; font-size: .73rem; letter-spacing: .08em; text-transform: uppercase; color: #7d8091; font-weight: 720; }
-      @media (max-width: 700px) { .hero-panel { padding: 1.5rem; border-radius: 19px; } .hero-pills { flex-wrap: wrap; } div[data-testid="stForm"] { padding: 1rem; } }
+      :root { color-scheme: dark; --ink:#f4f5f7; --muted:#9aa3b2; --line:#252b36; --panel:#11151d; --accent:#b7f36b; --accent-ink:#10150b; }
+      .stApp { background: radial-gradient(ellipse at 82% 0%, rgba(105,87,223,.14), transparent 33rem), #090b10; color:var(--ink); }
+      [data-testid="stHeader"] { background:transparent; }
+      [data-testid="stSidebar"] { display:none; }
+      [data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"] { display:none; }
+      [data-testid="stToolbar"] { right:1rem; }
+      .block-container { max-width:1120px; padding:1.35rem 2.2rem 4.5rem; }
+      .brand-row { display:flex; align-items:center; justify-content:space-between; margin:.25rem 0 1rem; color:#dfe3e9; }
+      .brand-name { display:flex; align-items:center; gap:.7rem; font-weight:800; letter-spacing:.08em; font-size:.78rem; }
+      .brand-symbol { display:inline-flex; align-items:center; justify-content:center; width:2rem; height:2rem; border-radius:10px; color:#11150c; background:var(--accent); font-size:1.1rem; }
+      .brand-meta { color:#778091; font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; }
+      .hero-panel { position:relative; overflow:hidden; padding:2.1rem 2.3rem 2rem; margin:.45rem 0 1.15rem; border:1px solid #2a2c40; border-radius:24px; background:linear-gradient(118deg,#151821 0%,#191827 60%,#211d36 100%); box-shadow:0 24px 65px rgba(0,0,0,.25); }
+      .hero-panel:after { content:''; position:absolute; width:300px; height:300px; border-radius:50%; right:-110px; top:-205px; background:rgba(183,243,107,.12); box-shadow:-145px 245px 0 -92px rgba(119,99,235,.16); pointer-events:none; }
+      .hero-eyebrow { color:var(--accent); font-size:.72rem; font-weight:760; letter-spacing:.14em; text-transform:uppercase; position:relative; z-index:1; }
+      .hero-title { color:#f6f4ff; font-size:clamp(2.2rem,5vw,4rem); font-weight:790; letter-spacing:-.06em; line-height:1.02; margin:.8rem 0 .75rem; position:relative; z-index:1; }
+      .hero-copy { color:#b1b4c2; font-size:1rem; max-width:620px; line-height:1.65; margin:0; position:relative; z-index:1; }
+      .hero-badges { display:flex; flex-wrap:wrap; gap:.55rem; margin-top:1.35rem; position:relative; z-index:1; }
+      .hero-badge { border:1px solid #343243; border-radius:999px; color:#d1d0dd; padding:.42rem .75rem; font-size:.74rem; background:rgba(255,255,255,.035); }
+      .section-heading { color:#f0f1f5; font-size:1.08rem; font-weight:740; letter-spacing:-.025em; margin-bottom:.15rem; }
+      .step-label { color:#8992a2; font-size:.69rem; font-weight:750; letter-spacing:.14em; text-transform:uppercase; margin:1.25rem 0 .55rem; }
+      div[data-testid="stForm"] { background:rgba(17,21,29,.84); border:1px solid var(--line); padding:1.4rem 1.5rem 1.3rem; border-radius:21px; box-shadow:0 12px 35px rgba(0,0,0,.12); }
+      div[data-testid="stVerticalBlockBorderWrapper"] { background:#10141c; border-color:#282e39; border-radius:17px; }
+      .platform-heading { display:flex; align-items:center; gap:.75rem; padding:.35rem 0 .6rem; color:#f2f3f6; font-weight:720; }
+      .platform-logo { width:2.55rem; height:2.55rem; border-radius:13px; display:inline-flex; align-items:center; justify-content:center; background:#1b202a; }
+      .platform-logo svg { width:1.25rem; height:1.25rem; }
+      .platform-name { font-size:.92rem; }
+      div[data-testid="stTextArea"] textarea, div[data-testid="stTextInput"] input { border-radius:12px; background:#0d1118; border-color:#2b313c; }
+      div[data-testid="stSelectbox"] > div > div { border-radius:11px; background:#0d1118; }
+      div[data-testid="stCheckbox"] label p { color:#dfe2e8; font-weight:600; }
+      div[data-testid="stExpander"] { border:1px solid #282e39; border-radius:15px; background:#10141c; }
+      .stCaption { color:#929bab; }
+      .stButton > button[kind="primary"] { background:var(--accent); color:var(--accent-ink); border:0; border-radius:12px; min-height:3.2rem; font-weight:780; box-shadow:0 8px 25px rgba(183,243,107,.12); }
+      .stButton > button[kind="primary"]:hover { background:#c8ff86; border:0; color:#10150b; }
+      .stDownloadButton > button { border-radius:11px; border-color:#343a46; color:#edf0f4; background:#141923; }
+      [data-testid="stMetric"] { background:#11151d; border:1px solid var(--line); border-radius:14px; padding:12px 16px; }
+      @media (max-width:640px) {
+        .block-container { padding:.8rem .8rem 3rem; }
+        .brand-row { margin:.1rem .15rem .65rem; }
+        .brand-meta { display:none; }
+        .hero-panel { padding:1.35rem 1.25rem 1.45rem; border-radius:19px; margin:.35rem 0 .8rem; }
+        .hero-title { font-size:2.25rem; }
+        .hero-copy { font-size:.91rem; }
+        .hero-badges { gap:.4rem; margin-top:1rem; }
+        .hero-badge { font-size:.68rem; padding:.38rem .6rem; }
+        div[data-testid="stForm"] { padding:1rem .9rem; border-radius:17px; }
+        div[data-testid="stHorizontalBlock"] { gap:.55rem; }
+        div[data-testid="stHorizontalBlock"] { flex-direction:column !important; align-items:stretch !important; }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] { width:100% !important; min-width:100% !important; flex:1 1 100% !important; }
+        .platform-logo { width:2.2rem; height:2.2rem; }
+        .platform-name { font-size:.82rem; }
+      }
+      @media (min-width:641px) and (max-width:1024px) {
+        .block-container { max-width:940px; padding:1.15rem 1.45rem 3.5rem; }
+        .hero-panel { padding:1.8rem 1.9rem; }
+      }
+      @media (min-width:1025px) and (max-width:1440px) {
+        .block-container { max-width:1120px; padding-top:1.35rem; }
+      }
+      @media (min-width:1441px) {
+        .block-container { max-width:1240px; }
+      }
     </style>
     """,
     unsafe_allow_html=True,
@@ -266,20 +309,67 @@ def export_markdown(posts: dict[str, str], topic: str) -> str:
     return "\n".join(sections)
 
 
-with st.sidebar:
-    st.markdown("### ✳  Social Studio")
-    st.caption("A CrewAI-powered content workspace")
-    st.divider()
-    st.markdown("#### Model providers")
-    st.caption("Deployment keys stay on the server. You can also enter your own key for this session.")
-    api_keys: dict[str, str] = {}
+st.markdown(
+    '<div class="brand-row"><div class="brand-name"><span class="brand-symbol">✳</span> SOCIAL STUDIO</div><div class="brand-meta">CREWAI · MULTI-MODEL CONTENT</div></div>',
+    unsafe_allow_html=True,
+)
+
+components.html(
+    """
+    <style>
+      html,body{margin:0;padding:0;background:transparent;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+      .hello{height:42px;display:flex;align-items:center;justify-content:space-between;color:#f0f2f5;font-size:14px}
+      .hello strong{font-size:15px;font-weight:720;letter-spacing:-.02em}
+      .hello span{color:#8e98a8;font-size:12px}
+      @media(max-width:520px){.hello{height:38px}.hello span{font-size:10px}.hello strong{font-size:14px}}
+    </style>
+    <div class="hello"><strong id="salutation">Welcome to Social Studio</strong><span id="local-time"></span></div>
+    <script>
+      function updateLocalGreeting(){
+        const now=new Date();
+        const hour=now.getHours();
+        const greeting=hour>=5&&hour<12?"Good morning":hour>=12&&hour<17?"Good afternoon":hour>=17&&hour<21?"Good evening":"Good night";
+        const zone=Intl.DateTimeFormat().resolvedOptions().timeZone||"your local time";
+        const time=new Intl.DateTimeFormat(undefined,{hour:"numeric",minute:"2-digit"}).format(now);
+        document.getElementById("salutation").textContent=greeting;
+        document.getElementById("local-time").textContent=`${time} · ${zone}`;
+      }
+      updateLocalGreeting();
+      setInterval(updateLocalGreeting,60000);
+    </script>
+    """,
+    height=46,
+    scrolling=False,
+)
+
+st.markdown(
+    """
+    <div class="hero-panel">
+      <div class="hero-eyebrow">Your social content, in sync</div>
+      <div class="hero-title">One idea.<br>Three native posts.</div>
+      <p class="hero-copy">Shape one clear message into content that feels at home on every platform. Set your voice, choose your AI team, and make every post count.</p>
+      <div class="hero-badges"><span class="hero-badge">X / Twitter</span><span class="hero-badge">LinkedIn</span><span class="hero-badge">Instagram</span><span class="hero-badge">CrewAI agents</span></div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+server_api_keys = {
+    config["env_key"]: os.getenv(config["env_key"], "").strip()
+    for config in PROVIDERS.values()
+}
+api_keys: dict[str, str] = dict(server_api_keys)
+server_provider_count = sum(bool(value) for value in server_api_keys.values())
+
+with st.expander(
+    f"AI connections · {server_provider_count}/3 server keys",
+    expanded=server_provider_count == 0,
+):
+    st.caption("Deployment keys are used on the server and never shown here. Keys entered below are session-only and are not saved by this app.")
     for provider, config in PROVIDERS.items():
         env_key = config["env_key"]
-        saved_value = os.getenv(env_key, "")
-        if saved_value:
-            api_keys[env_key] = saved_value
-            st.markdown(f"**{provider}** · ready")
-            st.caption("Configured privately by the app owner")
+        if server_api_keys[env_key]:
+            st.markdown(f"**{provider}** · connected securely")
         else:
             api_keys[env_key] = st.text_input(
                 f"{provider} API key",
@@ -287,48 +377,33 @@ with st.sidebar:
                 placeholder="Paste your key for this session",
                 key=f"provider_key_{provider}",
             ).strip()
-        st.link_button(f"Get {provider} key ↗", config["key_url"], use_container_width=True)
-
-    configured_count = sum(bool(api_keys[config["env_key"]]) for config in PROVIDERS.values())
-    st.caption(f"{configured_count} of 3 providers ready in this session")
-    st.caption("Keys entered here are used for this session and are never saved by the app.")
-    if any(os.getenv(config["env_key"], "") for config in PROVIDERS.values()):
-        st.caption("Generations use the app owner's provider quota and may incur charges.")
-    st.divider()
-    st.markdown("#### Your crew")
-    st.markdown("**01**  Platform writers\n\n**02**  Optional AI editor\n\n**03**  CrewAI workflow")
-    st.caption("Draft only. Nothing is published to your social accounts.")
-
-st.markdown(
-    """
-    <div class="hero-panel">
-      <div class="hero-top"><span class="brand-mark">✳</span> SOCIAL MEDIA ASSISTANT <span style="margin-left:auto">MULTI-MODEL STUDIO</span></div>
-      <div class="hero-title">Show up everywhere.<br>Still sound like you.</div>
-      <p class="hero-copy">Turn one clear brief into platform-native content. Choose a writing model, shape the brand voice, and add a second model when you want an editorial pass.</p>
-      <div class="hero-pills"><span class="hero-pill">X / Twitter</span><span class="hero-pill">LinkedIn</span><span class="hero-pill">Instagram</span><span class="hero-pill">CrewAI agents</span></div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+        st.link_button(f"Get {provider} key ↗", config["key_url"])
+    if server_provider_count:
+        st.caption("Generations using app-managed keys count toward the app owner's provider usage.")
 
 with st.form("content_brief", clear_on_submit=False):
-    st.markdown("### Build your next post")
+    st.markdown("### Create your next post")
     st.caption("Start with the message. Your AI team will adapt it for each channel.")
     topic = st.text_area(
         "Topic or source material",
         placeholder="What's the story? Share a launch, idea, product, point of view, or a few notes…",
-        height=120,
+        height=125,
     )
 
-    st.markdown("#### Choose your channels")
+    st.markdown('<div class="step-label">01 · Choose your channels</div>', unsafe_allow_html=True)
     channel_cols = st.columns(3)
     selected_platforms: list[str] = []
     for col, platform in zip(channel_cols, PLATFORMS):
         with col:
-            if st.checkbox(platform, value=True, key=f"platform_{PLATFORMS[platform]['key']}"):
-                selected_platforms.append(platform)
+            with st.container(border=True):
+                st.markdown(
+                    f'<div class="platform-heading"><span class="platform-logo" style="color:{PLATFORM_COLORS[platform]}">{PLATFORM_LOGOS[platform]}</span><span class="platform-name">{platform}</span></div>',
+                    unsafe_allow_html=True,
+                )
+                if st.checkbox("Create a post", value=True, key=f"platform_{PLATFORMS[platform]['key']}"):
+                    selected_platforms.append(platform)
 
-    st.markdown("#### Make it yours")
+    st.markdown('<div class="step-label">02 · Make it yours</div>', unsafe_allow_html=True)
     details_left, details_right = st.columns(2)
     with details_left:
         audience = st.text_input("Who are you speaking to?", placeholder="e.g. first-time founders")
@@ -340,7 +415,7 @@ with st.form("content_brief", clear_on_submit=False):
         )
         call_to_action = st.text_input("Call to action (optional)", placeholder="e.g. Join the waitlist")
 
-    st.markdown("#### Choose your AI team")
+    st.markdown('<div class="step-label">03 · Choose your AI team</div>', unsafe_allow_html=True)
     model_col, review_col = st.columns(2)
     with model_col:
         writer_model_name = st.selectbox("Writing model", list(MODEL_OPTIONS), index=list(MODEL_OPTIONS).index(DEFAULT_MODEL))
@@ -356,7 +431,7 @@ with st.form("content_brief", clear_on_submit=False):
                 index=list(MODEL_OPTIONS).index(reviewer_default),
             )
         else:
-            st.caption("A second model can tighten the drafts while preserving your facts and voice.")
+            st.caption("Add an editor to tighten the drafts while preserving your facts and voice.")
 
     submitted = st.form_submit_button("✳  Create platform-ready posts", type="primary", use_container_width=True)
 
@@ -377,7 +452,7 @@ if submitted:
             }
         )
         if missing_providers:
-            st.error("Add a key for " + ", ".join(missing_providers) + " in the sidebar to use the selected model(s).")
+            st.error("Add a key for " + ", ".join(missing_providers) + " under AI connections to use the selected model(s).")
         else:
             try:
                 with st.spinner("Your platform writers are drafting…" if not review_enabled else "Writers are drafting; your editor is reviewing…"):
@@ -405,7 +480,7 @@ if submitted:
 
 posts = st.session_state.get("generated_posts", {})
 if posts:
-    st.divider()
+    st.markdown('<div class="step-label">Your workspace</div>', unsafe_allow_html=True)
     edited_posts = {
         key: st.session_state.get(f"draft_{key}", content)
         for key, content in posts.items()
@@ -427,12 +502,17 @@ if posts:
         )
 
     result_cols = st.columns(min(len(posts), 3))
-    labels = {spec["key"]: (label, spec["icon"]) for label, spec in PLATFORMS.items()}
+    labels = {spec["key"]: label for label, spec in PLATFORMS.items()}
     for index, (key, content) in enumerate(posts.items()):
-        label, icon = labels.get(key, (key.title(), "✳"))
+        label = labels.get(key, key.title())
         with result_cols[index % len(result_cols)]:
             with st.container(border=True):
-                st.markdown(f"**{icon}  {label}**")
+                logo = PLATFORM_LOGOS.get(label, "✳")
+                color = PLATFORM_COLORS.get(label, "#b7f36b")
+                st.markdown(
+                    f'<div class="platform-heading"><span class="platform-logo" style="color:{color}">{logo}</span><span class="platform-name">{label}</span></div>',
+                    unsafe_allow_html=True,
+                )
                 edited_content = st.text_area(
                     f"{label} draft",
                     value=content,
@@ -449,10 +529,11 @@ if posts:
                     use_container_width=True,
                 )
 
-st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
-with st.expander("How this project works"):
+st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+with st.expander("How your content is created"):
     st.markdown(
         "The app creates one CrewAI agent and task for each selected platform. "
         "Those tasks run in a sequential crew. Choose OpenAI, Anthropic, or Google Gemini for drafting, "
-        "then optionally use a different model for an editorial pass. Generated copy stays in your current browser session and can be edited or downloaded."
+        "then optionally use a different model for an editorial pass. Generated copy stays in your current browser session and can be edited or downloaded. "
+        "Nothing is published to your social accounts."
     )
