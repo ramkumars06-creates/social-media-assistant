@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import mimetypes
 from datetime import datetime
 
 import streamlit as st
@@ -103,6 +104,8 @@ MODEL_OPTIONS = {
 }
 
 DEFAULT_MODEL = "OpenAI · GPT-4o mini"
+MAX_MEDIA_BYTES = 14 * 1024 * 1024
+MEDIA_FILE_TYPES = ["jpg", "jpeg", "png", "webp", "mp4", "mov", "webm", "avi"]
 
 PLATFORM_LOGOS = {
     "X / Twitter": '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.64 7.584H.47l8.6-9.83L0 1.153h7.594l5.243 6.932zm-1.29 19.493h2.04L6.486 3.24H4.298z"/></svg>',
@@ -144,6 +147,7 @@ st.markdown(
       div[data-testid="stSelectbox"] > div > div { border-radius:11px; background:#0d1118; }
       div[data-testid="stCheckbox"] label p { color:#dfe2e8; font-weight:600; }
       div[data-testid="stExpander"] { border:1px solid #282e39; border-radius:15px; background:#10141c; }
+      [data-testid="stFileUploaderDropzone"] { background:#0d1118; border:1px dashed #3a4250; border-radius:15px; }
       .stCaption { color:#929bab; }
       .stButton > button[kind="primary"] { background:var(--accent); color:var(--accent-ink); border:0; border-radius:12px; min-height:3.2rem; font-weight:780; box-shadow:0 8px 25px rgba(183,243,107,.12); }
       .stButton > button[kind="primary"]:hover { background:#c8ff86; border:0; color:#10150b; }
@@ -189,6 +193,7 @@ def create_posts(
     objective: str,
     voice: str,
     call_to_action: str,
+    media_context: str | None,
     api_keys: dict[str, str],
     writer_model_name: str,
     reviewer_model_name: str | None,
@@ -237,15 +242,23 @@ def create_posts(
             description=(
                 f"Create one ready-to-publish {platform} post using the brief below.\n\n"
                 f"Topic or source material: {topic}\n"
+                f"Visual or video observations: {media_context or 'No media provided'}\n"
                 f"Target audience: {audience or 'A broad audience interested in this topic'}\n"
                 f"Objective: {objective}\n"
                 f"Brand voice: {voice or 'Clear, human, and useful'}\n"
                 f"Call to action: {call_to_action or 'Choose a natural CTA only if it improves the post'}\n\n"
                 f"Platform guidance: {spec['guidance']}\n\n"
-                "Use only facts present in the supplied topic. Do not mention this brief or explain your choices. "
-                "Return only the final post text."
+                "Use only facts present in the supplied topic and visual observations. Do not infer identities, locations, dates, "
+                "or unsupported details from the media. Do not mention this brief or explain your choices. "
+                "When visual or video observations are provided, return exactly this format:\n"
+                "Caption:\n[platform-ready caption]\n\nHashtag suggestions:\n[relevant hashtags]\n"
+                "Keep hashtags separate from the caption. Use at most 2 for X / Twitter, 3–5 for Instagram, and 2–4 for LinkedIn. "
+                "Without media, return only the final post text."
             ),
-            expected_output=f"One polished {platform} post, ready to paste and publish, with no surrounding explanation.",
+            expected_output=(
+                f"One polished {platform} post. For media-based posts, include a caption followed by separate hashtag suggestions; "
+                "otherwise return the post text only."
+            ),
             agent=agent,
             markdown=False,
         )
@@ -270,6 +283,7 @@ def create_posts(
                 description=(
                     f"Edit the supplied {platform} draft for clarity, originality, platform fit, and the stated goal. "
                     "Preserve all supported facts and the chosen brand voice. Do not add claims or explain the edits. "
+                    "If the draft has Caption and Hashtag suggestions sections, preserve both headings and keep hashtags separate. "
                     "Return only the final ready-to-publish post."
                 ),
                 expected_output=f"One improved {platform} post, ready to publish, with no surrounding explanation.",
@@ -300,6 +314,40 @@ def create_posts(
     if not posts and task_keys:
         posts[task_keys[-1]] = str(getattr(result, "raw", result)).strip()
     return posts
+
+
+def analyze_media(*, media_bytes: bytes, mime_type: str, api_key: str) -> str:
+    """Create concise, factual visual notes from an image or short video using Gemini."""
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=api_key)
+    prompt = (
+        "Analyze this uploaded social-media asset and return concise visual notes for a caption writer. "
+        "Describe the main visible subjects, setting, actions or movement, mood, colors, and any readable text. "
+        "For video, summarize the meaningful moments and any clearly audible speech or sound. "
+        "Do not identify people, infer a location, or invent context, dates, claims, or facts that are not clearly present. "
+        "Return factual observations only, in a few short sentences."
+    )
+    if mime_type.startswith("video/"):
+        media_part = types.Part(
+            inline_data=types.Blob(data=media_bytes, mime_type=mime_type)
+        )
+    else:
+        media_part = types.Part.from_bytes(data=media_bytes, mime_type=mime_type)
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-3.8-flash",
+            contents=[prompt, media_part],
+        )
+    finally:
+        client.close()
+
+    analysis = (response.text or "").strip()
+    if not analysis:
+        raise ValueError("Gemini did not return any media observations.")
+    return analysis
 
 
 def export_markdown(posts: dict[str, str], topic: str) -> str:
@@ -381,12 +429,48 @@ with st.expander(
     if server_provider_count:
         st.caption("Generations using app-managed keys count toward the app owner's provider usage.")
 
+with st.container(border=True):
+    upload_left, upload_right = st.columns([1.35, 1])
+    with upload_left:
+        st.markdown("### Add a photo or video")
+        st.caption("Get a visual read, then turn it into a caption and hashtag ideas.")
+        uploaded_media = st.file_uploader(
+            "Choose an image or short video",
+            type=MEDIA_FILE_TYPES,
+            key="social_media_upload",
+            help="Images and short clips up to 14 MB. Supported: JPG, PNG, WebP, MP4, MOV, WebM, AVI.",
+        )
+    with upload_right:
+        st.markdown("**Visual-first writing**")
+        st.caption("Gemini analyzes the media. Your selected writing model creates each platform caption and separates hashtag suggestions.")
+        st.caption("Media is sent to Google Gemini for analysis and is not saved by this app.")
+
+media_bytes = uploaded_media.getvalue() if uploaded_media else None
+media_mime_type = (
+    mimetypes.guess_type(uploaded_media.name)[0] or uploaded_media.type or ""
+    if uploaded_media
+    else ""
+)
+media_is_valid = True
+if uploaded_media:
+    if len(media_bytes) > MAX_MEDIA_BYTES:
+        media_is_valid = False
+        st.error("This file is larger than 14 MB. Choose a smaller image or compress the video and try again.")
+    elif media_mime_type.startswith("image/"):
+        st.image(media_bytes, caption=uploaded_media.name, use_container_width=True)
+    elif media_mime_type.startswith("video/"):
+        st.video(media_bytes, format=media_mime_type)
+        st.caption(uploaded_media.name)
+    else:
+        media_is_valid = False
+        st.error("That file type could not be read as an image or video. Try JPG, PNG, WebP, MP4, MOV, WebM, or AVI.")
+
 with st.form("content_brief", clear_on_submit=False):
     st.markdown("### Create your next post")
-    st.caption("Start with the message. Your AI team will adapt it for each channel.")
+    st.caption("Add a topic, or let your uploaded media lead the way. Your AI team adapts the result for each channel.")
     topic = st.text_area(
         "Topic or source material",
-        placeholder="What's the story? Share a launch, idea, product, point of view, or a few notes…",
+        placeholder="Optional with a photo/video. Add a launch, idea, product, point of view, or a few notes…",
         height=125,
     )
 
@@ -436,25 +520,36 @@ with st.form("content_brief", clear_on_submit=False):
     submitted = st.form_submit_button("✳  Create platform-ready posts", type="primary", use_container_width=True)
 
 if submitted:
-    if not topic.strip():
-        st.error("Add a topic or a short brief to get started.")
+    if not topic.strip() and not uploaded_media:
+        st.error("Add a short topic or upload a photo or video to get started.")
     elif not selected_platforms:
         st.error("Choose at least one platform.")
+    elif uploaded_media and not media_is_valid:
+        st.error("Choose a supported image or video under 14 MB before creating posts.")
     else:
         required_models = [writer_model_name]
         if reviewer_model_name:
             required_models.append(reviewer_model_name)
-        missing_providers = sorted(
-            {
+        missing_providers = {
                 MODEL_OPTIONS[name]["provider"]
                 for name in required_models
                 if not api_keys.get(PROVIDERS[MODEL_OPTIONS[name]["provider"]]["env_key"])
-            }
-        )
+        }
+        if uploaded_media and not api_keys.get(PROVIDERS["Google Gemini"]["env_key"]):
+            missing_providers.add("Google Gemini (media analysis)")
+        missing_providers = sorted(missing_providers)
         if missing_providers:
-            st.error("Add a key for " + ", ".join(missing_providers) + " under AI connections to use the selected model(s).")
+            st.error("Add a key for " + ", ".join(missing_providers) + " under AI connections to use the selected model(s) and media analysis.")
         else:
             try:
+                media_context = None
+                if media_bytes:
+                    with st.spinner("Gemini is reading your photo or video…"):
+                        media_context = analyze_media(
+                            media_bytes=media_bytes,
+                            mime_type=media_mime_type,
+                            api_key=api_keys[PROVIDERS["Google Gemini"]["env_key"]],
+                        )
                 with st.spinner("Your platform writers are drafting…" if not review_enabled else "Writers are drafting; your editor is reviewing…"):
                     generated = create_posts(
                         topic=topic,
@@ -463,6 +558,7 @@ if submitted:
                         objective=objective,
                         voice=voice,
                         call_to_action=call_to_action,
+                        media_context=media_context,
                         api_keys=api_keys,
                         writer_model_name=writer_model_name,
                         reviewer_model_name=reviewer_model_name,
@@ -472,6 +568,8 @@ if submitted:
                 st.session_state["generated_at"] = datetime.now().strftime("%b %d, %Y · %I:%M %p")
                 st.session_state["generated_model"] = writer_model_name
                 st.session_state["review_model"] = reviewer_model_name
+                st.session_state["media_context"] = media_context
+                st.session_state["media_name"] = uploaded_media.name if uploaded_media else None
                 for key, post in generated.items():
                     st.session_state[f"draft_{key}"] = post
             except Exception as exc:
@@ -481,6 +579,9 @@ if submitted:
 posts = st.session_state.get("generated_posts", {})
 if posts:
     st.markdown('<div class="step-label">Your workspace</div>', unsafe_allow_html=True)
+    if st.session_state.get("media_context"):
+        with st.expander(f"What Gemini noticed · {st.session_state.get('media_name', 'uploaded media')}"):
+            st.write(st.session_state["media_context"])
     edited_posts = {
         key: st.session_state.get(f"draft_{key}", content)
         for key, content in posts.items()

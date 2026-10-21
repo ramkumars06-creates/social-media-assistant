@@ -1,6 +1,6 @@
 # Social Media Assistant
 
-A polished, responsive content studio with a dark theme that turns one topic or brief into platform-specific posts for X/Twitter, LinkedIn, and Instagram. Each selected channel gets its own CrewAI writing agent. Choose OpenAI, Anthropic, or Google Gemini for the writers, then optionally add a second-model editing pass. The greeting follows the visitor's device time zone.
+A polished, responsive content studio with a dark theme that turns a topic, photo, or short video into platform-specific posts for X/Twitter, LinkedIn, and Instagram. Gemini analyzes media; each selected channel gets its own CrewAI writing agent using your chosen writer model. Optionally add a second-model editing pass. The greeting follows the visitor's device time zone.
 
 ## Run locally
 
@@ -24,6 +24,8 @@ GOOGLE_API_KEY=your-google-api-key
 ```
 
 When a provider key is loaded from `.env` or the deployment environment, the app uses it on the server without displaying it in a field. Keys entered under **AI connections** are session-only and are not saved by the app. Provider API keys are issued by the providers and cannot be created by this app.
+
+Photo and video analysis requires a Google Gemini API key, even when a different provider is selected for writing. Uploads are limited to 14 MB and are sent inline to Gemini; this app does not save uploaded media. With an upload, generated drafts show a caption and separate hashtag suggestions for each selected platform.
 
 ## Deploy publicly on Streamlit Community Cloud
 
